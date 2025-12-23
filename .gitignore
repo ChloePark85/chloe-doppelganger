@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.env
+
+# Data files
+*.faiss
+python-backend/data/
+python-backend/models/*.onnx
+
+# Unity
+unity-project/Library/
+unity-project/Temp/
+unity-project/Obj/
+unity-project/Build/
+unity-project/Builds/
+unity-project/Logs/
+unity-project/UserSettings/
+unity-project/MemoryCaptures/
+unity-project/*.csproj
+unity-project/*.unityproj
+unity-project/*.sln
+unity-project/*.suo
+unity-project/*.tmp
+unity-project/*.user
+unity-project/*.userprefs
+unity-project/*.pidb
+unity-project/*.booproj
+unity-project/*.svd
+unity-project/*.pdb
+unity-project/*.mdb
+unity-project/*.opendb
+unity-project/*.VC.db
+unity-project/*.pidb.meta
+unity-project/*.pdb.meta
+unity-project/*.mdb.meta
+
+# Unity Asset Store
+unity-project/Assets/AssetStoreTools*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
