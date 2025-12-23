@@ -1,72 +1,78 @@
 # Chloe Doppelganger
 
-3D 아바타 기반 AI 도플갱어(디지털 분신) 시스템
+3D 아바타 기반 AI 도플갱어(디지털 분신) 웹 애플리케이션
 
 ## 아키텍처
 
 ```
-┌─────────────────── Unity (6000.2.10f1) ───────────────────┐
-│  Voice Command ──► Avatar ──► Voice                       │
-│       │              │           │                        │
-│   Whisper(STT)   Agent Framework  ElevenLabs(TTS)        │
-│                  (Agent, VectorDB)                        │
-└───────────────────────┬───────────────────────────────────┘
-                        │ HTTP/WebSocket
-┌───────────────────────▼───────────────────────────────────┐
-│                  Python Backend                            │
-│   NeuroSync(Lipsync)  ◄──►  Ollama(LLM, VLM, Embedding)   │
-│                       ◄──►  FAISS(VectorDB)               │
-└───────────────────────────────────────────────────────────┘
+┌─────────────── Web Frontend (Next.js) ───────────────┐
+│  Three.js + GLB ──► 3D Avatar                        │
+│  Web Speech API ──► 음성 입력                         │
+│  Web Audio API ──► 음성 재생 + LipSync               │
+└──────────────────────┬───────────────────────────────┘
+                       │ HTTP/WebSocket
+┌──────────────────────▼───────────────────────────────┐
+│                  Python Backend                       │
+│   Ollama (LLM, Embedding)                            │
+│   ElevenLabs (TTS, Voice Cloning)                    │
+│   NeuroSync (LipSync → ARKit Blendshapes)            │
+│   FAISS (VectorDB for RAG)                           │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## 기술 스택
 
 | 컴포넌트 | 기술 |
 |---------|------|
-| **프론트엔드** | Unity 6000.2.10f1 |
+| **프론트엔드** | Next.js 14 + React + TypeScript |
+| **3D 렌더링** | Three.js + React Three Fiber |
+| **상태관리** | Zustand |
+| **스타일링** | Tailwind CSS |
 | **백엔드** | Python + FastAPI |
-| **STT** | Whisper |
-| **TTS** | ElevenLabs |
+| **STT** | Web Speech API (브라우저 내장) |
+| **TTS** | ElevenLabs (Voice Cloning) |
 | **LLM** | Ollama (llama3.2) |
 | **Embedding** | qwen3-embedding:4b (2560 dim) |
 | **VectorDB** | FAISS |
-| **LipSync** | NeuroSync |
-| **Avatar** | ARKit 52 Blendshapes |
+| **LipSync** | NeuroSync (ARKit 52 Blendshapes) |
 
 ## 프로젝트 구조
 
 ```
 chloe-doppelganger/
 ├── python-backend/
-│   ├── config/
-│   │   └── settings.py
+│   ├── config/settings.py
 │   ├── src/
-│   │   ├── api/
-│   │   │   └── main.py          # FastAPI 메인 서버
+│   │   ├── api/main.py              # FastAPI 서버
 │   │   ├── services/
-│   │   │   ├── ollama_service.py
-│   │   │   ├── elevenlabs_service.py
-│   │   │   ├── neurosync_service.py
-│   │   │   └── vector_db_service.py
-│   │   └── models/
-│   │       └── schemas.py
+│   │   │   ├── ollama_service.py    # LLM + Embedding
+│   │   │   ├── elevenlabs_service.py # TTS
+│   │   │   ├── neurosync_service.py  # LipSync
+│   │   │   └── vector_db_service.py  # RAG
+│   │   └── models/schemas.py
 │   ├── requirements.txt
 │   └── .env.example
 │
-└── unity-project/
-    └── Assets/
-        └── Scripts/
-            ├── Agent/
-            │   ├── AgentWorkflowManager.cs
-            │   └── ApiClient.cs
-            ├── Avatar/
-            │   ├── AvatarController.cs
-            │   └── ARKitBlendshapes.cs
-            ├── Voice/
-            │   ├── VoiceInputHandler.cs
-            │   └── WebcamCapture.cs
-            └── UI/
-                └── DoppelgangerUI.cs
+└── web-frontend/
+    ├── src/
+    │   ├── app/                     # Next.js App Router
+    │   │   ├── layout.tsx
+    │   │   ├── page.tsx
+    │   │   └── globals.css
+    │   ├── components/
+    │   │   ├── AvatarViewer.tsx     # Three.js 3D 뷰어
+    │   │   ├── ChatPanel.tsx        # 채팅 UI
+    │   │   ├── VoiceInput.tsx       # 음성 입력
+    │   │   └── StatusBar.tsx        # 상태 표시
+    │   ├── lib/
+    │   │   ├── api.ts               # API 클라이언트
+    │   │   ├── store.ts             # Zustand 상태
+    │   │   └── utils.ts
+    │   ├── hooks/
+    │   │   └── useAudio.ts          # 오디오 재생 훅
+    │   └── types/index.ts
+    ├── package.json
+    └── .env.example
 ```
 
 ## 설치 및 실행
@@ -85,35 +91,66 @@ pip install -r requirements.txt
 
 # 환경변수 설정
 cp .env.example .env
-# .env 파일에서 ELEVENLABS_API_KEY 등 설정
-
-# Ollama 실행 (별도 터미널)
-ollama serve
-ollama pull llama3.2
-ollama pull qwen3-embedding:4b
+# .env 파일 편집하여 ELEVENLABS_API_KEY 등 설정
 
 # 서버 실행
 python -m src.api.main
 ```
 
-### 2. Unity 프로젝트 설정
+### 2. Ollama 설치 (로컬 PC에서)
 
-1. Unity Hub에서 Unity 6000.2.10f1 설치
-2. `unity-project` 폴더를 Unity로 열기
-3. 필요한 패키지 설치:
-   - TextMeshPro
-   - Newtonsoft JSON (선택)
-4. 씬 설정 및 컴포넌트 연결
+```bash
+# Mac
+brew install ollama
 
-### 3. 아바타 준비
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows: https://ollama.com/download/windows 에서 다운로드
+
+# 모델 다운로드
+ollama pull llama3.2
+ollama pull qwen3-embedding:4b
+
+# 서버 실행
+ollama serve
+```
+
+### 3. 웹 프론트엔드 설정
+
+```bash
+cd web-frontend
+
+# 의존성 설치
+npm install
+
+# 환경변수 설정
+cp .env.example .env.local
+
+# 개발 서버 실행
+npm run dev
+```
+
+브라우저에서 http://localhost:3000 접속
+
+### 4. 아바타 준비
 
 **ChatAvatar 사용 (권장)**
 1. https://hyper3d.ai/chatavatar 접속
 2. 얼굴 사진 업로드하여 3D 아바타 생성
-3. FBX 파일 다운로드
-4. Unity로 임포트
+3. **FBX 파일 다운로드**
+4. **Blender로 GLB 변환** (File → Export → glTF 2.0)
+5. 웹앱에 GLB 파일 드래그 앤 드롭
 
-**또는 Unity Asset Store에서 다운로드**
+**온라인 변환기 사용**
+- https://products.aspose.app/3d/conversion/fbx-to-glb
+
+## 사용 방법
+
+1. 웹앱 접속 (http://localhost:3000)
+2. GLB 아바타 파일을 왼쪽 3D 뷰어에 드래그 앤 드롭
+3. 오른쪽 채팅창에서 텍스트 입력 또는 마이크 버튼으로 음성 입력
+4. 도플갱어가 음성으로 응답하며 아바타가 립싱크 애니메이션 수행
 
 ## API 엔드포인트
 
@@ -128,15 +165,21 @@ python -m src.api.main
 | `/api/rag/query` | POST | RAG 검색 |
 | `/ws/chat` | WebSocket | 스트리밍 채팅 |
 
-## ElevenLabs 음성 복제
+## ElevenLabs 음성 복제 설정
 
 1. https://elevenlabs.io/ 가입
-2. Voice Lab에서 "Add Voice" → "Instant Voice Cloning"
+2. Voice Lab → "Add Voice" → "Instant Voice Cloning"
 3. 자신의 음성 샘플 업로드 (30초~1분)
 4. 생성된 Voice ID를 `.env`에 설정
 
+```env
+ELEVENLABS_API_KEY=your_api_key
+ELEVENLABS_VOICE_ID=your_cloned_voice_id
+```
+
 ## 환경 변수
 
+### Python Backend (.env)
 ```env
 # ElevenLabs (필수)
 ELEVENLABS_API_KEY=your_api_key
@@ -151,6 +194,22 @@ OLLAMA_EMBEDDING_MODEL=qwen3-embedding:4b
 HOST=0.0.0.0
 PORT=8000
 ```
+
+### Web Frontend (.env.local)
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_WS_URL=ws://localhost:8000
+```
+
+## 브라우저 호환성
+
+| 기능 | Chrome | Firefox | Safari | Edge |
+|------|--------|---------|--------|------|
+| 3D 렌더링 | ✅ | ✅ | ✅ | ✅ |
+| 음성 입력 | ✅ | ⚠️ | ⚠️ | ✅ |
+| 음성 재생 | ✅ | ✅ | ✅ | ✅ |
+
+※ 음성 입력(Web Speech API)은 Chrome/Edge에서 가장 잘 작동합니다.
 
 ## 라이선스
 
