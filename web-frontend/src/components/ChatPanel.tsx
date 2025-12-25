@@ -193,7 +193,7 @@ export function ChatPanel() {
       {/* Header */}
       <div className="p-4 border-b border-gray-700 bg-gradient-to-r from-primary-900/50 to-gray-800">
         <h2 className="text-lg font-semibold">Chloe와 대화하기</h2>
-        <p className="text-sm text-gray-400">대화 후 커피챗 일정을 잡아보세요</p>
+        <p className="text-sm text-gray-400">음성 또는 텍스트로 대화 가능</p>
       </div>
 
       {/* Messages */}
