@@ -137,32 +137,48 @@ export function SubtitleChat() {
 
       const audio = new Audio(audioUrl);
       let animationId: number;
+      let lipSyncStarted = false;
 
       // Korean text-based lip sync animation
       const animateLipSync = () => {
         if (lipSyncRef.current) {
           const blendshapes = lipSyncRef.current.update();
           setBlendshapes(blendshapes);
-
-          if (lipSyncRef.current.getIsPlaying()) {
-            animationId = requestAnimationFrame(animateLipSync);
-          }
         }
+        // Keep animating while audio is playing
+        if (!audio.paused && !audio.ended) {
+          animationId = requestAnimationFrame(animateLipSync);
+        }
+      };
+
+      // Start lip sync when we have both duration and text
+      const startLipSync = (duration: number) => {
+        if (lipSyncStarted) return;
+        lipSyncStarted = true;
+
+        console.log(`Starting lip sync: duration=${duration}ms, text="${text.substring(0, 30)}..."`);
+
+        if (lipSyncRef.current) {
+          lipSyncRef.current.start(text, duration);
+        }
+        animateLipSync();
       };
 
       // When audio metadata is loaded, we know the duration
       audio.onloadedmetadata = () => {
         const duration = audio.duration * 1000; // Convert to milliseconds
-        console.log(`Audio duration: ${duration}ms, Text: "${text.substring(0, 30)}..."`);
-
-        if (lipSyncRef.current) {
-          lipSyncRef.current.start(text, duration);
-        }
+        console.log(`Audio metadata loaded: duration=${duration}ms`);
+        startLipSync(duration);
       };
 
       audio.onplay = () => {
-        console.log("Audio started playing - starting Korean lip sync");
-        animateLipSync();
+        console.log("Audio started playing");
+        // If metadata wasn't loaded yet, estimate duration from text length
+        if (!lipSyncStarted) {
+          const estimatedDuration = text.length * 100; // ~100ms per character
+          console.log(`Using estimated duration: ${estimatedDuration}ms`);
+          startLipSync(estimatedDuration);
+        }
       };
 
       audio.onended = () => {

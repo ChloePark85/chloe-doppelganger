@@ -203,6 +203,9 @@ export class KoreanLipSync {
     this.frameStartTime = performance.now();
     this.isPlaying = true;
     this.targetBlendshapes = visemeToBlendshapes(this.frames[0]?.viseme || 'NEUTRAL');
+
+    console.log(`KoreanLipSync started: ${this.frames.length} frames, duration: ${audioDuration}ms`);
+    console.log(`First 5 visemes:`, this.frames.slice(0, 5).map(f => f.viseme));
   }
 
   stop() {
@@ -237,6 +240,7 @@ export class KoreanLipSync {
       this.frameStartTime = now;
 
       if (this.currentFrameIndex >= this.frames.length) {
+        console.log("KoreanLipSync finished all frames");
         this.stop();
         return this.currentBlendshapes;
       }
@@ -250,6 +254,11 @@ export class KoreanLipSync {
       this.targetBlendshapes,
       0.3 // Smoothing factor
     );
+
+    // Debug: log jawOpen value periodically
+    if (this.currentFrameIndex % 10 === 0 && this.currentBlendshapes[17] > 0.05) {
+      console.log(`LipSync frame ${this.currentFrameIndex}: jawOpen=${this.currentBlendshapes[17].toFixed(2)}`);
+    }
 
     return this.currentBlendshapes;
   }
