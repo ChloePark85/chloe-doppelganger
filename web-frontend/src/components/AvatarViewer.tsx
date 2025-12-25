@@ -249,11 +249,6 @@ export default function AvatarViewer() {
       >
         <Scene />
       </Canvas>
-
-      {/* Drop zone hint */}
-      <div className="absolute bottom-4 left-4 text-sm text-gray-500">
-        GLB/GLTF 파일을 드래그하여 아바타 로드
-      </div>
     </div>
   );
 }
