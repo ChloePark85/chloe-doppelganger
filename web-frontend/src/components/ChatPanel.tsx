@@ -191,17 +191,18 @@ export function ChatPanel() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-semibold">대화</h2>
-        <p className="text-sm text-gray-400">도플갱어와 대화하세요</p>
+      <div className="p-4 border-b border-gray-700 bg-gradient-to-r from-primary-900/50 to-gray-800">
+        <h2 className="text-lg font-semibold">Chloe와 대화하기</h2>
+        <p className="text-sm text-gray-400">대화 후 커피챗 일정을 잡아보세요</p>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
-            <p>아직 대화가 없습니다.</p>
-            <p className="text-sm mt-2">메시지를 보내거나 음성으로 말해보세요!</p>
+            <p className="text-lg">안녕하세요!</p>
+            <p className="text-sm mt-2">Chloe에게 무엇이든 물어보세요.</p>
+            <p className="text-sm text-gray-600 mt-1">커피챗을 원하시면 일정을 잡아드려요.</p>
           </div>
         ) : (
           messages.map((message) => (

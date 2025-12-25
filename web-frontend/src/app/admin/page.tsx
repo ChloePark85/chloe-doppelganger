@@ -13,7 +13,7 @@ export default function AdminPage() {
       <div className="max-w-4xl mx-auto mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">도플갱어 관리</h1>
+            <h1 className="text-2xl font-bold">Coffeechat with Chloe - Admin</h1>
             <p className="text-gray-400 mt-1">페르소나, 지식, 메모리, 캘린더 설정</p>
           </div>
           <Link

@@ -1,6 +1,6 @@
-# Chloe Doppelganger
+# Coffeechat with Chloe
 
-3D 아바타 기반 AI 도플갱어(디지털 분신) 웹 애플리케이션
+3D 아바타 기반 AI 도플갱어와 대화하고 커피챗을 예약하는 웹 애플리케이션
 
 ## 아키텍처
 
