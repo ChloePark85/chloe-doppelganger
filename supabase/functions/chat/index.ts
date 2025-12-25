@@ -71,11 +71,19 @@ serve(async (req) => {
 
     // Check if user is asking about availability/schedule
     let calendarContext = "";
-    const scheduleKeywords = ["일정", "시간", "가능", "언제", "약속", "커피챗", "미팅", "만남", "토요일", "일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "오전", "오후", "주말"];
-    const isAskingAboutSchedule = scheduleKeywords.some(keyword => message.includes(keyword));
+    const scheduleKeywords = [
+      "일정", "시간", "가능", "언제", "약속", "커피챗", "미팅", "만남",
+      "토요일", "일요일", "월요일", "화요일", "수요일", "목요일", "금요일",
+      "오전", "오후", "주말", "내일", "오늘", "모레", "이번주", "다음주",
+      "몇시", "몇 시", "schedule", "available", "meet"
+    ];
+    const isAskingAboutSchedule = scheduleKeywords.some(keyword => message.toLowerCase().includes(keyword));
+
+    console.log(`Message: "${message}", isAskingAboutSchedule: ${isAskingAboutSchedule}`);
 
     if (isAskingAboutSchedule) {
       calendarContext = await getCalendarAvailability();
+      console.log(`Calendar context: ${calendarContext.substring(0, 200)}...`);
     }
 
     // Build system prompt
@@ -219,7 +227,14 @@ async function getCalendarAvailability(): Promise<string> {
     );
 
     const eventsData = await eventsRes.json();
+
+    if (eventsData.error) {
+      console.error("Calendar API error:", eventsData.error);
+      return "";
+    }
+
     const events = eventsData.items || [];
+    console.log(`Found ${events.length} calendar events`);
 
     // Build calendar context
     const busyTimes: string[] = [];
@@ -276,6 +291,12 @@ function buildSystemPrompt(persona: any, facts: any[], context: string, calendar
 
   if (calendarContext) {
     prompt += calendarContext;
+    prompt += `
+
+중요: 위 캘린더 정보를 반드시 확인하세요!
+- 캘린더에 일정이 있는 시간대는 절대로 가능하다고 말하지 마세요.
+- 사용자가 특정 날짜/시간을 물으면, 캘린더 정보와 대조하여 정확히 답변하세요.
+- 불가능한 시간이면 "그 시간은 다른 일정이 있어서 어려워요"라고 답하고 다른 시간을 제안하세요.`;
   }
 
   prompt += `
@@ -283,7 +304,6 @@ function buildSystemPrompt(persona: any, facts: any[], context: string, calendar
 커피챗 요청 시:
 - 온라인 미팅은 즉시 Google Meet 링크를 생성해서 제공합니다.
 - 오프라인 미팅은 장소와 시간을 확인한 후 승인 절차가 필요하다고 안내합니다.
-- 캘린더에 이미 일정이 있는 시간은 피해서 제안하세요.
 
 자연스럽고 친근하게 대화하세요. 답변은 간결하게 2-3문장으로 하세요.`;
 
