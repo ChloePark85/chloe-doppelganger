@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { sendMessage, healthCheck } from "@/lib/supabase";
 import { VoiceInput } from "./VoiceInput";
 import { clsx } from "clsx";
+import { KoreanLipSync } from "@/lib/koreanLipSync";
 
 export function SubtitleChat() {
   const [inputText, setInputText] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [currentResponseText, setCurrentResponseText] = useState("");
+  const lipSyncRef = useRef<KoreanLipSync | null>(null);
   const {
     messages,
     addMessage,
@@ -19,6 +22,11 @@ export function SubtitleChat() {
     setIsPlaying,
     isConnected,
   } = useAppStore();
+
+  // Initialize lip sync controller
+  useEffect(() => {
+    lipSyncRef.current = new KoreanLipSync();
+  }, []);
 
   // Typewriter effect for subtitle
   useEffect(() => {
@@ -61,10 +69,11 @@ export function SubtitleChat() {
 
       addMessage({ role: "assistant", content: response.text });
       setSubtitle(response.text);
+      setCurrentResponseText(response.text);
 
       if (response.audio_base64) {
         setStatus("speaking");
-        await playAudio(response.audio_base64);
+        await playAudio(response.audio_base64, response.text);
       }
 
       setStatus("idle");
@@ -96,10 +105,11 @@ export function SubtitleChat() {
 
       addMessage({ role: "assistant", content: response.text });
       setSubtitle(response.text);
+      setCurrentResponseText(response.text);
 
       if (response.audio_base64) {
         setStatus("speaking");
-        await playAudio(response.audio_base64);
+        await playAudio(response.audio_base64, response.text);
       }
 
       setStatus("idle");
@@ -113,7 +123,7 @@ export function SubtitleChat() {
     }
   };
 
-  const playAudio = async (audioBase64: string): Promise<void> => {
+  const playAudio = async (audioBase64: string, text: string): Promise<void> => {
     return new Promise((resolve) => {
       setIsPlaying(true);
 
@@ -125,103 +135,54 @@ export function SubtitleChat() {
       const blob = new Blob([audioArray], { type: "audio/mp3" });
       const audioUrl = URL.createObjectURL(blob);
 
-      // Create audio context for lip sync analysis
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const audio = new Audio(audioUrl);
-      audio.crossOrigin = "anonymous";
-
-      const source = audioContext.createMediaElementSource(audio);
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyser.connect(audioContext.destination);
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
       let animationId: number;
 
-      // Lip sync animation loop with formant analysis
+      // Korean text-based lip sync animation
       const animateLipSync = () => {
-        analyser.getByteFrequencyData(dataArray);
+        if (lipSyncRef.current) {
+          const blendshapes = lipSyncRef.current.update();
+          setBlendshapes(blendshapes);
 
-        const sampleRate = audioContext.sampleRate;
-        const binSize = sampleRate / analyser.fftSize;
-
-        // Analyze different frequency bands for phoneme approximation
-        // Low frequencies (200-500Hz): "ah", "oh" vowels - open mouth
-        // Mid-low frequencies (500-1000Hz): "ee", "oo" vowels - rounded/narrow mouth
-        // Mid frequencies (1000-2000Hz): general speech energy
-        // High frequencies (2000-4000Hz): "s", "sh", "f" consonants
-
-        const getFrequencyEnergy = (startHz: number, endHz: number) => {
-          const startBin = Math.floor(startHz / binSize);
-          const endBin = Math.min(Math.floor(endHz / binSize), dataArray.length - 1);
-          let sum = 0;
-          for (let i = startBin; i <= endBin; i++) {
-            sum += dataArray[i];
+          if (lipSyncRef.current.getIsPlaying()) {
+            animationId = requestAnimationFrame(animateLipSync);
           }
-          return sum / (endBin - startBin + 1) / 255;
-        };
+        }
+      };
 
-        const lowEnergy = getFrequencyEnergy(200, 500);      // "ah", "oh"
-        const midLowEnergy = getFrequencyEnergy(500, 1000);  // "ee", "oo"
-        const midEnergy = getFrequencyEnergy(1000, 2000);    // general speech
-        const highEnergy = getFrequencyEnergy(2000, 4000);   // sibilants
+      // When audio metadata is loaded, we know the duration
+      audio.onloadedmetadata = () => {
+        const duration = audio.duration * 1000; // Convert to milliseconds
+        console.log(`Audio duration: ${duration}ms, Text: "${text.substring(0, 30)}..."`);
 
-        // Create blendshape array (52 ARKit blendshapes)
-        const blendshapes = new Array(52).fill(0);
-
-        // Keep values subtle and natural (max ~0.3-0.4 instead of 0.8)
-        // Jaw open (index 17) - based on low frequencies, but subtle
-        blendshapes[17] = Math.min(lowEnergy * 0.5, 0.35);
-
-        // Mouth funnel (index 19) - for rounded vowels like "oo"
-        blendshapes[19] = midLowEnergy * 0.25;
-
-        // Mouth pucker (index 20) - for "oo", "w" sounds
-        blendshapes[20] = midLowEnergy * 0.15;
-
-        // Mouth smile (indices 23, 24) - subtle smile for "ee" sounds
-        const smileAmount = Math.max(0, midEnergy - lowEnergy) * 0.2;
-        blendshapes[23] = smileAmount; // mouthSmileLeft
-        blendshapes[24] = smileAmount; // mouthSmileRight
-
-        // Mouth stretch (indices 29, 30) - for sibilants "s", "sh"
-        blendshapes[29] = highEnergy * 0.15; // mouthStretchLeft
-        blendshapes[30] = highEnergy * 0.15; // mouthStretchRight
-
-        // Mouth lower down (indices 37, 38) - subtle lip movement
-        const overallVolume = (lowEnergy + midLowEnergy + midEnergy) / 3;
-        blendshapes[37] = overallVolume * 0.15; // mouthLowerDownLeft
-        blendshapes[38] = overallVolume * 0.15; // mouthLowerDownRight
-
-        // Mouth upper up (indices 39, 40) - very subtle
-        blendshapes[39] = lowEnergy * 0.08; // mouthUpperUpLeft
-        blendshapes[40] = lowEnergy * 0.08; // mouthUpperUpRight
-
-        setBlendshapes(blendshapes);
-
-        animationId = requestAnimationFrame(animateLipSync);
+        if (lipSyncRef.current) {
+          lipSyncRef.current.start(text, duration);
+        }
       };
 
       audio.onplay = () => {
-        console.log("Audio started playing - starting lip sync animation");
+        console.log("Audio started playing - starting Korean lip sync");
         animateLipSync();
       };
 
       audio.onended = () => {
         cancelAnimationFrame(animationId);
+        if (lipSyncRef.current) {
+          lipSyncRef.current.stop();
+        }
         setBlendshapes(new Array(52).fill(0));
         setIsPlaying(false);
-        audioContext.close();
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
 
       audio.onerror = () => {
         cancelAnimationFrame(animationId);
+        if (lipSyncRef.current) {
+          lipSyncRef.current.stop();
+        }
         setBlendshapes(new Array(52).fill(0));
         setIsPlaying(false);
-        audioContext.close();
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
