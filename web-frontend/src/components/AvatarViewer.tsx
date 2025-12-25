@@ -26,6 +26,8 @@ function AvatarModel({ url }: AvatarModelProps) {
         child.morphTargetDictionary
       ) {
         meshes.push(child);
+        // Log available morph targets for debugging
+        console.log("Morph targets found:", Object.keys(child.morphTargetDictionary));
       }
     });
     setSkinnedMeshes(meshes);
@@ -34,6 +36,12 @@ function AvatarModel({ url }: AvatarModelProps) {
 
   // Apply blendshapes
   useFrame((state, delta) => {
+    // Debug: log when blendshapes change
+    const jawValue = blendshapes[17];
+    if (jawValue > 0.1) {
+      console.log("AvatarViewer receiving jawOpen:", jawValue.toFixed(2), "meshes:", skinnedMeshes.length);
+    }
+
     skinnedMeshes.forEach((mesh) => {
       if (!mesh.morphTargetInfluences || !mesh.morphTargetDictionary) return;
 

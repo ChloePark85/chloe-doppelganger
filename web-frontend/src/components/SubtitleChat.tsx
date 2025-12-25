@@ -164,12 +164,18 @@ export function SubtitleChat() {
         blendshapes[37] = normalizedVolume * 0.2; // mouthLowerDownLeft
         blendshapes[38] = normalizedVolume * 0.2; // mouthLowerDownRight
 
+        // Debug logging
+        if (normalizedVolume > 0.1) {
+          console.log("Lip sync - jawOpen:", blendshapes[17].toFixed(2), "volume:", normalizedVolume.toFixed(2));
+        }
+
         setBlendshapes(blendshapes);
 
         animationId = requestAnimationFrame(animateLipSync);
       };
 
       audio.onplay = () => {
+        console.log("Audio started playing - starting lip sync animation");
         animateLipSync();
       };
 
