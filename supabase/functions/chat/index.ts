@@ -129,13 +129,8 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               text: assistantMessage,
-              model_id: "eleven_flash_v2_5", // Fast, high quality model
-              voice_settings: {
-                stability: 0.5,
-                similarity_boost: 0.75,
-                style: 0.5,
-                use_speaker_boost: true,
-              },
+              model_id: "eleven_v3", // ElevenLabs v3 (alpha) - most expressive
+              output_format: "mp3_44100_128",
             }),
           }
         );
