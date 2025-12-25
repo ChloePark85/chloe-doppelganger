@@ -76,10 +76,12 @@ function AvatarModel({ url }: AvatarModelProps) {
       });
     });
 
-    // Idle animation (subtle breathing/movement)
-    if (meshRef.current && !isPlaying) {
+    // Continuous slow rotation and breathing animation
+    if (meshRef.current) {
       const time = state.clock.elapsedTime;
-      meshRef.current.rotation.y = Math.sin(time * 0.5) * 0.02;
+      // Slow continuous rotation
+      meshRef.current.rotation.y = Math.sin(time * 0.3) * 0.15;
+      // Subtle breathing motion
       meshRef.current.position.y = Math.sin(time * 0.8) * 0.005;
     }
   });

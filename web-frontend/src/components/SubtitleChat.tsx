@@ -139,35 +139,69 @@ export function SubtitleChat() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       let animationId: number;
 
-      // Lip sync animation loop
+      // Lip sync animation loop with formant analysis
       const animateLipSync = () => {
         analyser.getByteFrequencyData(dataArray);
 
-        // Calculate average amplitude (focus on speech frequencies 300-3000Hz)
-        const speechStart = Math.floor(300 / (audioContext.sampleRate / analyser.fftSize));
-        const speechEnd = Math.floor(3000 / (audioContext.sampleRate / analyser.fftSize));
-        let sum = 0;
-        for (let i = speechStart; i < speechEnd && i < dataArray.length; i++) {
-          sum += dataArray[i];
-        }
-        const avg = sum / (speechEnd - speechStart);
-        const normalizedVolume = Math.min(avg / 128, 1);
+        const sampleRate = audioContext.sampleRate;
+        const binSize = sampleRate / analyser.fftSize;
+
+        // Analyze different frequency bands for phoneme approximation
+        // Low frequencies (200-500Hz): "ah", "oh" vowels - open mouth
+        // Mid-low frequencies (500-1000Hz): "ee", "oo" vowels - rounded/narrow mouth
+        // Mid frequencies (1000-2000Hz): general speech energy
+        // High frequencies (2000-4000Hz): "s", "sh", "f" consonants
+
+        const getFrequencyEnergy = (startHz: number, endHz: number) => {
+          const startBin = Math.floor(startHz / binSize);
+          const endBin = Math.min(Math.floor(endHz / binSize), dataArray.length - 1);
+          let sum = 0;
+          for (let i = startBin; i <= endBin; i++) {
+            sum += dataArray[i];
+          }
+          return sum / (endBin - startBin + 1) / 255;
+        };
+
+        const lowEnergy = getFrequencyEnergy(200, 500);      // "ah", "oh"
+        const midLowEnergy = getFrequencyEnergy(500, 1000);  // "ee", "oo"
+        const midEnergy = getFrequencyEnergy(1000, 2000);    // general speech
+        const highEnergy = getFrequencyEnergy(2000, 4000);   // sibilants
 
         // Create blendshape array (52 ARKit blendshapes)
         const blendshapes = new Array(52).fill(0);
 
-        // Jaw open (index 17)
-        blendshapes[17] = normalizedVolume * 0.7;
-        // Mouth funnel (index 19)
-        blendshapes[19] = normalizedVolume * 0.3;
-        // Mouth open variations
-        blendshapes[37] = normalizedVolume * 0.2; // mouthLowerDownLeft
-        blendshapes[38] = normalizedVolume * 0.2; // mouthLowerDownRight
+        // Overall volume for jaw movement
+        const overallVolume = (lowEnergy + midLowEnergy + midEnergy) / 3;
 
-        // Debug logging
-        if (normalizedVolume > 0.1) {
-          console.log("Lip sync - jawOpen:", blendshapes[17].toFixed(2), "volume:", normalizedVolume.toFixed(2));
-        }
+        // Jaw open (index 17) - based on low frequencies (open vowels)
+        blendshapes[17] = Math.min(lowEnergy * 1.2, 0.8);
+
+        // Mouth funnel (index 19) - based on mid-low (rounded vowels like "oo")
+        blendshapes[19] = midLowEnergy * 0.6;
+
+        // Mouth pucker (index 20) - for "oo", "w" sounds
+        blendshapes[20] = midLowEnergy * 0.4;
+
+        // Mouth smile (indices 23, 24) - for "ee" sounds (high second formant)
+        const smileAmount = Math.max(0, midEnergy - lowEnergy) * 0.5;
+        blendshapes[23] = smileAmount; // mouthSmileLeft
+        blendshapes[24] = smileAmount; // mouthSmileRight
+
+        // Mouth stretch (indices 29, 30) - for sibilants "s", "sh"
+        blendshapes[29] = highEnergy * 0.4; // mouthStretchLeft
+        blendshapes[30] = highEnergy * 0.4; // mouthStretchRight
+
+        // Mouth lower down (indices 37, 38) - general mouth opening
+        blendshapes[37] = overallVolume * 0.3; // mouthLowerDownLeft
+        blendshapes[38] = overallVolume * 0.3; // mouthLowerDownRight
+
+        // Mouth upper up (indices 39, 40) - for emphasis
+        blendshapes[39] = lowEnergy * 0.2; // mouthUpperUpLeft
+        blendshapes[40] = lowEnergy * 0.2; // mouthUpperUpRight
+
+        // Add subtle random variation for more natural look
+        const variation = Math.sin(Date.now() * 0.01) * 0.05;
+        blendshapes[17] = Math.max(0, blendshapes[17] + variation);
 
         setBlendshapes(blendshapes);
 
