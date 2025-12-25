@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,6 @@ serve(async (req) => {
     // RAG: Search similar documents
     let context = "";
     if (use_rag) {
-      // Get embedding for the query
       const embeddingRes = await fetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
         headers: {
@@ -69,8 +69,17 @@ serve(async (req) => {
       }
     }
 
+    // Check if user is asking about availability/schedule
+    let calendarContext = "";
+    const scheduleKeywords = ["일정", "시간", "가능", "언제", "약속", "커피챗", "미팅", "만남", "토요일", "일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "오전", "오후", "주말"];
+    const isAskingAboutSchedule = scheduleKeywords.some(keyword => message.includes(keyword));
+
+    if (isAskingAboutSchedule) {
+      calendarContext = await getCalendarAvailability();
+    }
+
     // Build system prompt
-    const systemPrompt = buildSystemPrompt(persona, facts, context);
+    const systemPrompt = buildSystemPrompt(persona, facts, context, calendarContext);
 
     // Build messages
     const messages = [
@@ -103,34 +112,43 @@ serve(async (req) => {
       { session_id, role: "assistant", content: assistantMessage },
     ]);
 
-    // Generate TTS
+    // Generate TTS with ElevenLabs
     let audio_base64 = null;
     const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
     const voiceId = Deno.env.get("ELEVENLABS_VOICE_ID") || "21m00Tcm4TlvDq8ikWAM";
 
     if (elevenLabsKey) {
-      const ttsRes = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
-          method: "POST",
-          headers: {
-            "xi-api-key": elevenLabsKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            text: assistantMessage,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.75,
+      try {
+        const ttsRes = await fetch(
+          `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+          {
+            method: "POST",
+            headers: {
+              "xi-api-key": elevenLabsKey,
+              "Content-Type": "application/json",
             },
-          }),
-        }
-      );
+            body: JSON.stringify({
+              text: assistantMessage,
+              model_id: "eleven_flash_v2_5", // Fast, high quality model
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75,
+                style: 0.5,
+                use_speaker_boost: true,
+              },
+            }),
+          }
+        );
 
-      if (ttsRes.ok) {
-        const audioBuffer = await ttsRes.arrayBuffer();
-        audio_base64 = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+        if (ttsRes.ok) {
+          const audioBuffer = await ttsRes.arrayBuffer();
+          // Use Deno's base64 encoding to avoid stack overflow
+          audio_base64 = base64Encode(new Uint8Array(audioBuffer));
+        } else {
+          console.error("TTS error:", await ttsRes.text());
+        }
+      } catch (ttsError) {
+        console.error("TTS error:", ttsError);
       }
     }
 
@@ -155,7 +173,88 @@ serve(async (req) => {
   }
 });
 
-function buildSystemPrompt(persona: any, facts: any[], context: string): string {
+// Get calendar availability from Google Calendar
+async function getCalendarAvailability(): Promise<string> {
+  const googleRefreshToken = Deno.env.get("GOOGLE_REFRESH_TOKEN");
+  const googleClientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const googleClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+  const calendarId = Deno.env.get("GOOGLE_CALENDAR_ID") || "primary";
+
+  if (!googleRefreshToken || !googleClientId || !googleClientSecret) {
+    console.log("Google Calendar credentials not configured");
+    return "";
+  }
+
+  try {
+    // Get access token
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: googleClientId,
+        client_secret: googleClientSecret,
+        refresh_token: googleRefreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+    const accessToken = tokenData.access_token;
+
+    if (!accessToken) {
+      console.error("Failed to get access token:", tokenData);
+      return "";
+    }
+
+    // Get events for next 2 weeks
+    const now = new Date();
+    const twoWeeksLater = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    const eventsRes = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+      new URLSearchParams({
+        timeMin: now.toISOString(),
+        timeMax: twoWeeksLater.toISOString(),
+        singleEvents: "true",
+        orderBy: "startTime",
+      }),
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    const eventsData = await eventsRes.json();
+    const events = eventsData.items || [];
+
+    // Build calendar context
+    const busyTimes: string[] = [];
+    events.forEach((event: any) => {
+      const start = event.start?.dateTime || event.start?.date;
+      const end = event.end?.dateTime || event.end?.date;
+      if (start && end) {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const dayOfWeek = ["일", "월", "화", "수", "목", "금", "토"][startDate.getDay()];
+        const dateStr = `${startDate.getMonth() + 1}/${startDate.getDate()}(${dayOfWeek})`;
+        const timeStr = event.start?.dateTime
+          ? `${startDate.getHours()}:${String(startDate.getMinutes()).padStart(2, '0')}-${endDate.getHours()}:${String(endDate.getMinutes()).padStart(2, '0')}`
+          : "종일";
+        busyTimes.push(`- ${dateStr} ${timeStr}: ${event.summary || "일정 있음"}`);
+      }
+    });
+
+    if (busyTimes.length === 0) {
+      return "\n\n[캘린더 정보]\n앞으로 2주간 등록된 일정이 없습니다. 원하시는 시간에 커피챗 가능합니다.";
+    }
+
+    return `\n\n[캘린더 정보 - 이미 잡힌 일정]\n${busyTimes.join("\n")}\n\n위 시간대를 제외한 시간에 커피챗이 가능합니다. 평일 오전 10시-오후 6시 사이를 추천합니다.`;
+  } catch (error) {
+    console.error("Calendar error:", error);
+    return "";
+  }
+}
+
+function buildSystemPrompt(persona: any, facts: any[], context: string, calendarContext: string): string {
   const name = persona?.name || "Chloe";
   const description = persona?.description || "";
   const tone = persona?.personality?.tone || "friendly";
@@ -180,7 +279,18 @@ function buildSystemPrompt(persona: any, facts: any[], context: string): string 
     prompt += `관련 지식:\n${context}\n\n`;
   }
 
-  prompt += `사용자가 커피챗을 원하면 일정을 잡아주세요. 자연스럽고 친근하게 대화하세요.`;
+  if (calendarContext) {
+    prompt += calendarContext;
+  }
+
+  prompt += `
+
+커피챗 요청 시:
+- 온라인 미팅은 즉시 Google Meet 링크를 생성해서 제공합니다.
+- 오프라인 미팅은 장소와 시간을 확인한 후 승인 절차가 필요하다고 안내합니다.
+- 캘린더에 이미 일정이 있는 시간은 피해서 제안하세요.
+
+자연스럽고 친근하게 대화하세요. 답변은 간결하게 2-3문장으로 하세요.`;
 
   return prompt;
 }
