@@ -60,6 +60,18 @@ function AvatarModel({ url }: AvatarModelProps) {
             targetValue,
             delta * 10
           );
+        } else {
+          // Fallback: apply jaw open value to any mouth/jaw related morph targets
+          const lowerName = name.toLowerCase();
+          if (lowerName.includes("jaw") || lowerName.includes("mouth") ||
+              lowerName.includes("open") || lowerName.includes("viseme")) {
+            const jawValue = blendshapes[17]; // Use jawOpen value
+            influences[index] = THREE.MathUtils.lerp(
+              influences[index],
+              jawValue,
+              delta * 10
+            );
+          }
         }
       });
     });
@@ -84,6 +96,7 @@ function getARKitIndex(name: string): number {
   const normalizedName = name.toLowerCase().replace(/[_\s-]/g, "");
 
   const mappings: Record<string, number> = {
+    // ARKit standard names
     eyeblinkleft: 0,
     eyelookdownleft: 1,
     eyelookinleft: 2,
@@ -136,6 +149,26 @@ function getARKitIndex(name: string): number {
     nosesneerleft: 49,
     nosesneerright: 50,
     tongueout: 51,
+    // Alternative naming conventions (Oculus/Meta visemes, Ready Player Me, etc.)
+    visemeaa: 17, // maps to jawOpen
+    visemeo: 17,
+    visemeou: 17,
+    visemeee: 19, // maps to mouthFunnel
+    visemeih: 19,
+    visemech: 19,
+    visemedd: 18, // maps to mouthClose
+    visemeff: 20, // maps to mouthPucker
+    visemekk: 18,
+    visemenn: 18,
+    visemepp: 18,
+    visemess: 19,
+    visemeth: 19,
+    visemesil: 18,
+    mouthopen: 17,
+    openjaw: 17,
+    openmouth: 17,
+    aa: 17,
+    oh: 17,
   };
 
   return mappings[normalizedName] ?? -1;
