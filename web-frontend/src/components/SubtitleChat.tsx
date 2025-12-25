@@ -116,6 +116,7 @@ export function SubtitleChat() {
   const playAudio = async (audioBase64: string): Promise<void> => {
     return new Promise((resolve) => {
       setIsPlaying(true);
+
       const audioData = atob(audioBase64);
       const audioArray = new Uint8Array(audioData.length);
       for (let i = 0; i < audioData.length; i++) {
@@ -123,18 +124,73 @@ export function SubtitleChat() {
       }
       const blob = new Blob([audioArray], { type: "audio/mp3" });
       const audioUrl = URL.createObjectURL(blob);
+
+      // Create audio context for lip sync analysis
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const audio = new Audio(audioUrl);
+      audio.crossOrigin = "anonymous";
+
+      const source = audioContext.createMediaElementSource(audio);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyser.connect(audioContext.destination);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      let animationId: number;
+
+      // Lip sync animation loop
+      const animateLipSync = () => {
+        analyser.getByteFrequencyData(dataArray);
+
+        // Calculate average amplitude (focus on speech frequencies 300-3000Hz)
+        const speechStart = Math.floor(300 / (audioContext.sampleRate / analyser.fftSize));
+        const speechEnd = Math.floor(3000 / (audioContext.sampleRate / analyser.fftSize));
+        let sum = 0;
+        for (let i = speechStart; i < speechEnd && i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / (speechEnd - speechStart);
+        const normalizedVolume = Math.min(avg / 128, 1);
+
+        // Create blendshape array (52 ARKit blendshapes)
+        const blendshapes = new Array(52).fill(0);
+
+        // Jaw open (index 17)
+        blendshapes[17] = normalizedVolume * 0.7;
+        // Mouth funnel (index 19)
+        blendshapes[19] = normalizedVolume * 0.3;
+        // Mouth open variations
+        blendshapes[37] = normalizedVolume * 0.2; // mouthLowerDownLeft
+        blendshapes[38] = normalizedVolume * 0.2; // mouthLowerDownRight
+
+        setBlendshapes(blendshapes);
+
+        animationId = requestAnimationFrame(animateLipSync);
+      };
+
+      audio.onplay = () => {
+        animateLipSync();
+      };
 
       audio.onended = () => {
+        cancelAnimationFrame(animationId);
+        setBlendshapes(new Array(52).fill(0));
         setIsPlaying(false);
+        audioContext.close();
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
+
       audio.onerror = () => {
+        cancelAnimationFrame(animationId);
+        setBlendshapes(new Array(52).fill(0));
         setIsPlaying(false);
+        audioContext.close();
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
+
       audio.play().catch(() => {
         setIsPlaying(false);
         resolve();

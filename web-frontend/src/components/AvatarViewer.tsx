@@ -65,7 +65,7 @@ function AvatarModel({ url }: AvatarModelProps) {
   });
 
   return (
-    <group ref={meshRef} position={[0, -0.5, 0]} scale={2}>
+    <group ref={meshRef} position={[0, -0.3, 0]} scale={4}>
       <primitive object={scene} />
     </group>
   );
