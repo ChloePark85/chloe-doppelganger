@@ -51,7 +51,7 @@ export const useAppStore = create<AppState>((set) => ({
   clearMessages: () => set({ messages: [] }),
 
   // Avatar
-  avatarUrl: null,
+  avatarUrl: "https://oreyvvnarxlrzntxejzi.supabase.co/storage/v1/object/sign/avatars/avatar.glb?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82MGQ3MmM4Ny1mNDJmLTRlODYtOGUxZS1jODU2ZGYxNDFmOWUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJhdmF0YXJzL2F2YXRhci5nbGIiLCJpYXQiOjE3NjY2NjQ2MjUsImV4cCI6MTc5ODIwMDYyNX0.W5mogYXMcu5gq-BTokwQKLnV1TpG2A_A8UyqwgnXa30",
   setAvatarUrl: (url) => set({ avatarUrl: url }),
   blendshapes: new Array(52).fill(0),
   setBlendshapes: (values) => set({ blendshapes: values }),
