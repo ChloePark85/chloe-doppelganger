@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { apiClient } from "@/lib/api";
+import { sendMessage, healthCheck } from "@/lib/supabase";
 import { VoiceInput } from "./VoiceInput";
 import { clsx } from "clsx";
 
@@ -56,25 +56,15 @@ export function SubtitleChat() {
     setStatus("processing");
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
       setStatus("thinking");
-      const response = await apiClient.chat({
-        message: userMessage,
-        conversation_history: history,
-        use_rag: true,
-        include_vision: false,
-      });
+      const response = await sendMessage(userMessage, true);
 
       addMessage({ role: "assistant", content: response.text });
       setSubtitle(response.text);
 
-      if (response.audio_base64 && response.blendshapes) {
+      if (response.audio_base64) {
         setStatus("speaking");
-        await playAudioWithLipSync(response.audio_base64, response.blendshapes);
+        await playAudio(response.audio_base64);
       }
 
       setStatus("idle");
@@ -86,58 +76,6 @@ export function SubtitleChat() {
       setStatus("error");
       setTimeout(() => setStatus("idle"), 2000);
     }
-  };
-
-  const playAudioWithLipSync = async (
-    audioBase64: string,
-    blendshapes: number[][]
-  ): Promise<void> => {
-    return new Promise((resolve) => {
-      setIsPlaying(true);
-
-      const audioData = atob(audioBase64);
-      const audioArray = new Uint8Array(audioData.length);
-      for (let i = 0; i < audioData.length; i++) {
-        audioArray[i] = audioData.charCodeAt(i);
-      }
-
-      const blob = new Blob([audioArray], { type: "audio/mp3" });
-      const audioUrl = URL.createObjectURL(blob);
-      const audio = new Audio(audioUrl);
-
-      const fps = 60;
-      const frameDuration = 1000 / fps;
-      let frameIndex = 0;
-
-      const animationInterval = setInterval(() => {
-        if (frameIndex < blendshapes.length) {
-          setBlendshapes(blendshapes[frameIndex]);
-          frameIndex++;
-        }
-      }, frameDuration);
-
-      audio.onended = () => {
-        clearInterval(animationInterval);
-        setBlendshapes(new Array(52).fill(0));
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-        resolve();
-      };
-
-      audio.onerror = () => {
-        clearInterval(animationInterval);
-        setBlendshapes(new Array(52).fill(0));
-        setIsPlaying(false);
-        URL.revokeObjectURL(audioUrl);
-        resolve();
-      };
-
-      audio.play().catch(() => {
-        clearInterval(animationInterval);
-        setIsPlaying(false);
-        resolve();
-      });
-    });
   };
 
   const handleVoiceResult = (text: string) => {
@@ -153,25 +91,15 @@ export function SubtitleChat() {
     setStatus("processing");
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
       setStatus("thinking");
-      const response = await apiClient.chat({
-        message: text,
-        conversation_history: history,
-        use_rag: true,
-        include_vision: false,
-      });
+      const response = await sendMessage(text, true);
 
       addMessage({ role: "assistant", content: response.text });
       setSubtitle(response.text);
 
-      if (response.audio_base64 && response.blendshapes) {
+      if (response.audio_base64) {
         setStatus("speaking");
-        await playAudioWithLipSync(response.audio_base64, response.blendshapes);
+        await playAudio(response.audio_base64);
       }
 
       setStatus("idle");
@@ -183,6 +111,35 @@ export function SubtitleChat() {
       setStatus("error");
       setTimeout(() => setStatus("idle"), 2000);
     }
+  };
+
+  const playAudio = async (audioBase64: string): Promise<void> => {
+    return new Promise((resolve) => {
+      setIsPlaying(true);
+      const audioData = atob(audioBase64);
+      const audioArray = new Uint8Array(audioData.length);
+      for (let i = 0; i < audioData.length; i++) {
+        audioArray[i] = audioData.charCodeAt(i);
+      }
+      const blob = new Blob([audioArray], { type: "audio/mp3" });
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+
+      audio.onended = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      audio.onerror = () => {
+        setIsPlaying(false);
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      audio.play().catch(() => {
+        setIsPlaying(false);
+        resolve();
+      });
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

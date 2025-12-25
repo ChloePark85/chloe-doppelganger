@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { submitEmailSignup } from "@/lib/supabase";
 
 export function EmailSignup() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,33 +18,32 @@ export function EmailSignup() {
       return;
     }
 
+    setLoading(true);
     try {
-      // TODO: Connect to actual backend endpoint
-      // For now, just simulate success
-      console.log("Email signup:", email);
+      await submitEmailSignup(email);
       setSubmitted(true);
     } catch (err) {
       setError("신청 중 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
     }
   };
 
   if (submitted) {
     return (
-      <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl p-6 text-center">
-        <div className="text-3xl mb-3">✨</div>
-        <h3 className="text-lg font-semibold mb-2">신청 완료!</h3>
+      <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl p-4 text-center">
+        <h3 className="text-base font-semibold mb-1">신청 완료!</h3>
         <p className="text-gray-400 text-sm">
-          나만의 AI 도플갱어 서비스가 준비되면 연락드리겠습니다.
+          서비스가 준비되면 연락드리겠습니다.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl p-6">
-      <h3 className="text-lg font-semibold mb-2">나만의 AI 도플갱어를 만들고 싶으신가요?</h3>
-      <p className="text-gray-400 text-sm mb-4">
-        이메일을 남겨주시면 서비스 오픈 시 안내해드립니다.
+    <div className="bg-gray-800/90 backdrop-blur-sm rounded-xl p-4">
+      <p className="text-gray-400 text-sm mb-3 text-center">
+        나만의 AI 도플갱어를 만들고 싶으신가요? 이메일을 남겨주세요.
       </p>
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
@@ -50,16 +51,18 @@ export function EmailSignup() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="your@email.com"
-          className="flex-1 bg-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          disabled={loading}
+          className="flex-1 bg-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
         />
         <button
           type="submit"
-          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-sm font-medium transition-colors"
+          disabled={loading}
+          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
         >
-          신청하기
+          {loading ? "..." : "신청"}
         </button>
       </form>
-      {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
+      {error && <p className="text-red-400 text-sm mt-2 text-center">{error}</p>}
     </div>
   );
 }

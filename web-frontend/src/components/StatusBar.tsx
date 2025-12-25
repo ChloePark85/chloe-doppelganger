@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { apiClient } from "@/lib/api";
+import { healthCheck } from "@/lib/supabase";
 import { clsx } from "clsx";
 
 export function StatusBar() {
@@ -12,7 +12,7 @@ export function StatusBar() {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        const health = await apiClient.healthCheck();
+        const health = await healthCheck();
         setIsConnected(health.status === "healthy" || health.status === "degraded");
       } catch {
         setIsConnected(false);
