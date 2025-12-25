@@ -123,7 +123,9 @@ serve(async (req) => {
     // Generate TTS with ElevenLabs
     let audio_base64 = null;
     const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
-    const voiceId = Deno.env.get("ELEVENLABS_VOICE_ID") || "21m00Tcm4TlvDq8ikWAM";
+    const voiceId = Deno.env.get("ELEVENLABS_VOICE_ID") || "ShmDBuwhMPK2bJjWMQmg";
+
+    console.log(`Using ElevenLabs voice ID: ${voiceId}`);
 
     if (elevenLabsKey) {
       try {
@@ -238,9 +240,14 @@ async function getCalendarAvailability(): Promise<string> {
 
     // Build calendar context
     const busyTimes: string[] = [];
+    const today = new Date();
+    console.log(`Current date/time: ${today.toISOString()}`);
+
     events.forEach((event: any) => {
       const start = event.start?.dateTime || event.start?.date;
       const end = event.end?.dateTime || event.end?.date;
+      console.log(`Event: "${event.summary}" from ${start} to ${end}`);
+
       if (start && end) {
         const startDate = new Date(start);
         const endDate = new Date(end);
