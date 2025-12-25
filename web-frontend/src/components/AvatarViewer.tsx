@@ -65,7 +65,7 @@ function AvatarModel({ url }: AvatarModelProps) {
   });
 
   return (
-    <group ref={meshRef} position={[0, -1, 0]} scale={1}>
+    <group ref={meshRef} position={[0, -0.5, 0]} scale={2}>
       <primitive object={scene} />
     </group>
   );
@@ -133,23 +133,8 @@ function getARKitIndex(name: string): number {
   return mappings[normalizedName] ?? -1;
 }
 
-function PlaceholderAvatar() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const { isPlaying } = useAppStore();
-
-  useFrame((state) => {
-    if (meshRef.current && !isPlaying) {
-      const time = state.clock.elapsedTime;
-      meshRef.current.rotation.y = Math.sin(time * 0.5) * 0.1;
-    }
-  });
-
-  return (
-    <mesh ref={meshRef} position={[0, 0, 0]}>
-      <sphereGeometry args={[0.5, 32, 32]} />
-      <meshStandardMaterial color="#6366f1" metalness={0.3} roughness={0.7} />
-    </mesh>
-  );
+function LoadingIndicator() {
+  return null; // 로딩 중에는 아무것도 표시 안함
 }
 
 function Scene() {
@@ -167,12 +152,8 @@ function Scene() {
         castShadow
       />
 
-      <Suspense fallback={<PlaceholderAvatar />}>
-        {avatarUrl ? (
-          <AvatarModel url={avatarUrl} />
-        ) : (
-          <PlaceholderAvatar />
-        )}
+      <Suspense fallback={<LoadingIndicator />}>
+        {avatarUrl && <AvatarModel url={avatarUrl} />}
       </Suspense>
 
       <ContactShadows
