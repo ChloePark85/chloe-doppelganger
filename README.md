@@ -36,6 +36,30 @@
 | **VectorDB** | FAISS |
 | **LipSync** | NeuroSync (ARKit 52 Blendshapes) |
 
+## 주요 기능
+
+### 1. 페르소나 설정
+- 이름, 직업, 소개 설정
+- 말투 (친근/격식/편한/전문적)
+- 존댓말/반말 선택
+- 유머 수준 조절
+- 전문 분야 및 관심사 설정
+
+### 2. 지식 관리 (RAG)
+- PDF, TXT, DOCX, MD 파일 업로드
+- 자동 청킹 및 임베딩
+- 대화 시 관련 지식 자동 참조
+
+### 3. 메모리 시스템
+- 사실 정보 저장 (생일, 연락처, 선호도 등)
+- 대화 기록 저장
+- 장기 메모리 기반 응답
+
+### 4. Google Calendar 연동
+- OAuth 인증
+- 빈 시간 자동 확인
+- 커피챗 일정 예약
+
 ## 프로젝트 구조
 
 ```
@@ -48,14 +72,18 @@ chloe-doppelganger/
 │   │   │   ├── ollama_service.py    # LLM + Embedding
 │   │   │   ├── elevenlabs_service.py # TTS
 │   │   │   ├── neurosync_service.py  # LipSync
-│   │   │   └── vector_db_service.py  # RAG
+│   │   │   ├── vector_db_service.py  # VectorDB
+│   │   │   ├── document_service.py   # 문서 파싱
+│   │   │   ├── memory_service.py     # 메모리 관리
+│   │   │   ├── persona_service.py    # 페르소나 설정
+│   │   │   └── calendar_service.py   # Google Calendar
 │   │   └── models/schemas.py
 │   ├── requirements.txt
 │   └── .env.example
 │
 └── web-frontend/
     ├── src/
-    │   ├── app/                     # Next.js App Router
+    │   ├── app/
     │   │   ├── layout.tsx
     │   │   ├── page.tsx
     │   │   └── globals.css
@@ -63,13 +91,13 @@ chloe-doppelganger/
     │   │   ├── AvatarViewer.tsx     # Three.js 3D 뷰어
     │   │   ├── ChatPanel.tsx        # 채팅 UI
     │   │   ├── VoiceInput.tsx       # 음성 입력
-    │   │   └── StatusBar.tsx        # 상태 표시
+    │   │   ├── StatusBar.tsx        # 상태 표시
+    │   │   └── SettingsPanel.tsx    # 설정 패널
     │   ├── lib/
-    │   │   ├── api.ts               # API 클라이언트
-    │   │   ├── store.ts             # Zustand 상태
+    │   │   ├── api.ts
+    │   │   ├── store.ts
     │   │   └── utils.ts
-    │   ├── hooks/
-    │   │   └── useAudio.ts          # 오디오 재생 훅
+    │   ├── hooks/useAudio.ts
     │   └── types/index.ts
     ├── package.json
     └── .env.example

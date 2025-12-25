@@ -3,10 +3,12 @@ import base64
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, List
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from config.settings import settings
 from src.models.schemas import (
@@ -27,6 +29,10 @@ from src.services.ollama_service import ollama_service
 from src.services.elevenlabs_service import elevenlabs_service
 from src.services.neurosync_service import neurosync_service
 from src.services.vector_db_service import vector_db_service
+from src.services.document_service import document_service
+from src.services.memory_service import memory_service
+from src.services.persona_service import persona_service
+from src.services.calendar_service import calendar_service
 
 # Logging setup
 logging.basicConfig(
@@ -89,13 +95,22 @@ async def health_check():
 async def chat(request: ChatRequest):
     """Process chat message and return response with audio and lipsync."""
     try:
+        # Get persona system prompt
+        system_prompt = await persona_service.get_system_prompt()
+
+        # Get facts about user as additional context
+        facts_context = await memory_service.get_facts_as_context()
+
         # Get RAG context if enabled
-        context = None
+        rag_context = None
         if request.use_rag:
             query_embedding = await ollama_service.generate_embedding(request.message)
             relevant_docs = vector_db_service.search(query_embedding, top_k=3)
             if relevant_docs:
-                context = "\n\n".join([doc.content for doc in relevant_docs])
+                rag_context = "\n\n".join([doc.content for doc in relevant_docs])
+
+        # Combine all context
+        full_context = "\n\n".join(filter(None, [facts_context, rag_context]))
 
         # Generate LLM response
         if request.include_vision and request.image_base64:
@@ -108,7 +123,8 @@ async def chat(request: ChatRequest):
             response_text = await ollama_service.chat(
                 request.message,
                 request.conversation_history,
-                context=context,
+                system_prompt=system_prompt,
+                context=full_context if full_context else None,
             )
 
         # Generate TTS audio
@@ -311,6 +327,246 @@ async def websocket_chat(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         await websocket.close()
+
+
+# =============================================================================
+# Document Upload Endpoints
+# =============================================================================
+
+@app.post("/api/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    chunk_size: int = Form(500),
+):
+    """Upload and process a document for RAG."""
+    try:
+        # Check file type
+        if not any(file.filename.endswith(ext) for ext in document_service.SUPPORTED_EXTENSIONS):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type. Supported: {document_service.SUPPORTED_EXTENSIONS}"
+            )
+
+        # Read and parse document
+        content = await file.read()
+        text = await document_service.parse_document(content, file.filename)
+
+        # Chunk the text
+        chunks = document_service.chunk_text(text, chunk_size=chunk_size)
+
+        # Add chunks to vector store
+        added_ids = []
+        for i, chunk_text in enumerate(chunks):
+            embedding = await ollama_service.generate_embedding(chunk_text)
+            chunk = DocumentChunk(
+                id=str(uuid.uuid4()),
+                content=chunk_text,
+                embedding=embedding,
+                metadata={
+                    "source": file.filename,
+                    "chunk_index": i,
+                },
+            )
+            doc_id = vector_db_service.add_document(chunk)
+            added_ids.append(doc_id)
+
+        vector_db_service.save_to_disk()
+
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "chunks_added": len(added_ids),
+            "ids": added_ids,
+        }
+
+    except Exception as e:
+        logger.error(f"Document upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Memory Endpoints
+# =============================================================================
+
+@app.get("/api/memory/facts")
+async def get_facts(category: Optional[str] = None):
+    """Get all stored facts."""
+    facts = await memory_service.get_facts(category)
+    return {"facts": facts}
+
+
+@app.post("/api/memory/facts")
+async def save_fact(
+    category: str = Form(...),
+    key: str = Form(...),
+    value: str = Form(...),
+    source: Optional[str] = Form(None),
+):
+    """Save a fact about the user."""
+    await memory_service.save_fact(category, key, value, source)
+    return {"status": "saved", "category": category, "key": key}
+
+
+@app.delete("/api/memory/facts")
+async def delete_fact(category: str, key: str):
+    """Delete a fact."""
+    deleted = await memory_service.delete_fact(category, key)
+    if deleted:
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Fact not found")
+
+
+@app.post("/api/memory/save")
+async def save_memory(
+    content: str = Form(...),
+    importance: int = Form(5),
+    tags: Optional[str] = Form(None),
+):
+    """Save an important memory."""
+    tag_list = tags.split(",") if tags else None
+    await memory_service.save_memory(content, importance, tag_list)
+    return {"status": "saved"}
+
+
+@app.get("/api/memory/search")
+async def search_memories(query: str, limit: int = 10):
+    """Search through memories."""
+    results = await memory_service.search_memories(query, limit)
+    return {"results": results}
+
+
+# =============================================================================
+# Persona Endpoints
+# =============================================================================
+
+@app.get("/api/persona")
+async def get_persona():
+    """Get current persona settings."""
+    persona = await persona_service.get_persona()
+    return persona
+
+
+@app.put("/api/persona")
+async def update_persona(updates: dict):
+    """Update persona settings."""
+    persona = await persona_service.update_persona(updates)
+    return persona
+
+
+@app.post("/api/persona/reset")
+async def reset_persona():
+    """Reset persona to defaults."""
+    await persona_service.reset()
+    return {"status": "reset"}
+
+
+@app.get("/api/persona/prompt")
+async def get_persona_prompt():
+    """Get the generated system prompt."""
+    prompt = await persona_service.get_system_prompt()
+    return {"prompt": prompt}
+
+
+# =============================================================================
+# Calendar Endpoints
+# =============================================================================
+
+@app.get("/api/calendar/status")
+async def calendar_status():
+    """Check Google Calendar connection status."""
+    is_auth = await calendar_service.is_authenticated()
+    return {"authenticated": is_auth}
+
+
+@app.get("/api/calendar/auth")
+async def calendar_auth(redirect_uri: str):
+    """Get Google Calendar OAuth URL."""
+    try:
+        auth_url = calendar_service.get_auth_url(redirect_uri)
+        return {"auth_url": auth_url}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/calendar/callback")
+async def calendar_callback(code: str, redirect_uri: str):
+    """Handle OAuth callback."""
+    success = await calendar_service.handle_oauth_callback(code, redirect_uri)
+    if success:
+        return {"status": "authenticated"}
+    raise HTTPException(status_code=400, detail="Authentication failed")
+
+
+@app.get("/api/calendar/slots")
+async def get_available_slots(
+    days_ahead: int = Query(7, ge=1, le=30),
+    duration: int = Query(30, ge=15, le=120),
+):
+    """Get available time slots for booking."""
+    try:
+        start = datetime.now()
+        end = start + timedelta(days=days_ahead)
+        slots = await calendar_service.get_available_slots(
+            start, end, duration_minutes=duration
+        )
+        return {"slots": slots}
+    except Exception as e:
+        logger.error(f"Get slots error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/calendar/book")
+async def book_meeting(
+    title: str = Form(...),
+    start_time: str = Form(...),
+    duration_minutes: int = Form(30),
+    attendee_email: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+):
+    """Book a calendar event (coffee chat)."""
+    try:
+        start = datetime.fromisoformat(start_time)
+        end = start + timedelta(minutes=duration_minutes)
+
+        event = await calendar_service.create_event(
+            title=title,
+            start_time=start,
+            end_time=end,
+            description=description,
+            attendee_email=attendee_email,
+        )
+
+        return {"status": "booked", "event": event}
+    except Exception as e:
+        logger.error(f"Book meeting error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/calendar/events")
+async def get_upcoming_events(limit: int = 10):
+    """Get upcoming calendar events."""
+    try:
+        events = await calendar_service.get_upcoming_events(limit)
+        return {"events": events}
+    except Exception as e:
+        logger.error(f"Get events error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/calendar/events/{event_id}")
+async def delete_event(event_id: str):
+    """Delete a calendar event."""
+    success = await calendar_service.delete_event(event_id)
+    if success:
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Event not found")
+
+
+@app.post("/api/calendar/disconnect")
+async def disconnect_calendar():
+    """Disconnect Google Calendar."""
+    await calendar_service.disconnect()
+    return {"status": "disconnected"}
 
 
 # =============================================================================
